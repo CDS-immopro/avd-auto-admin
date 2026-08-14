@@ -1,0 +1,361 @@
+<!doctype html>
+<!-- =====================================================================
+     AVD AUTO — VOTRE PAGE D'ADMINISTRATION
+     =====================================================================
+     CE FICHIER EST UN MODELE. Il ne contient ni adresse ni cle : c'est
+     moteur/administration.py qui les pose au moment de l'ouvrir, en les
+     lisant dans votre .env. Le modele peut donc etre partage sans
+     rien reveler.
+
+     LE MOT DE PASSE N'EST JAMAIS ECRIT ICI. Il est demande a chaque
+     ouverture et ne quitte pas la memoire du navigateur.
+     ===================================================================== -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AVD Auto — Administration</title>
+<style>
+  :root{
+    --encre:#1b2430; --doux:#5b6876; --trait:#dfe4ea;
+    --fond:#f4f6f8; --blanc:#fff; --vert:#0d7a4a; --rouge:#b3261e;
+    --ambre:#9a6700; --accent:#12395e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 "Segoe UI",system-ui,sans-serif;
+       background:var(--fond);color:var(--encre)}
+  header{background:var(--accent);color:#fff;padding:18px 24px}
+  header h1{margin:0;font-size:19px;letter-spacing:.2px}
+  header p{margin:2px 0 0;font-size:13px;opacity:.85}
+  main{max-width:1180px;margin:0 auto;padding:22px}
+  section{background:var(--blanc);border:1px solid var(--trait);
+          border-radius:10px;padding:18px;margin-bottom:18px}
+  h2{font-size:15px;margin:0 0 14px;text-transform:uppercase;
+     letter-spacing:.6px;color:var(--doux)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--trait)}
+  th{font-size:12px;text-transform:uppercase;color:var(--doux);
+     letter-spacing:.5px}
+  td.nombre,th.nombre{text-align:right;font-variant-numeric:tabular-nums}
+  tr.alerte td{background:#fff6f5}
+  tr.bientot td{background:#fffaf0}
+  .puce{display:inline-block;padding:2px 9px;border-radius:11px;
+        font-size:12px;font-weight:600}
+  .ok{background:#e6f4ec;color:var(--vert)}
+  .stop{background:#fdeceb;color:var(--rouge)}
+  .attention{background:#fdf5e3;color:var(--ambre)}
+  button{font:inherit;padding:7px 13px;border:1px solid var(--trait);
+         background:var(--blanc);border-radius:7px;cursor:pointer}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.principal{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.danger:hover{border-color:var(--rouge);color:var(--rouge)}
+  input,select{font:inherit;padding:7px 9px;border:1px solid var(--trait);
+               border-radius:7px;background:var(--blanc)}
+  .ligne{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .cle{font-family:Consolas,monospace;font-size:13px;letter-spacing:.4px}
+  .discret{color:var(--doux);font-size:13px}
+  #porte{max-width:420px;margin:60px auto;text-align:center}
+  #message{padding:11px 14px;border-radius:8px;margin-bottom:14px;display:none}
+  .chiffre{font-size:26px;font-weight:600}
+  .cartes{display:flex;gap:14px;flex-wrap:wrap}
+  .carte{flex:1;min-width:170px;border:1px solid var(--trait);
+         border-radius:9px;padding:13px}
+</style>
+</head>
+<body>
+
+<div id="porte">
+  <h1>AVD Auto — Administration</h1>
+  <p class="discret">Un produit de Carrefour Des Services</p>
+  <p><input type="password" id="motdepasse" placeholder="Mot de passe"
+            style="width:230px" autofocus></p>
+  <p><button class="principal" onclick="entrer()">Entrer</button></p>
+  <p id="refus" class="discret"></p>
+</div>
+
+<div id="bureau" hidden>
+<header>
+  <h1>AVD Auto — Administration</h1>
+  <p>De la facture à l'AVD, automatiquement. — Carrefour Des Services</p>
+</header>
+
+<main>
+  <div id="message"></div>
+
+  <section>
+    <h2>Vue d'ensemble</h2>
+    <div class="cartes" id="resume"></div>
+  </section>
+
+  <section>
+    <h2>Abonnés</h2>
+    <div style="overflow-x:auto"><table id="table-forfaits">
+      <thead><tr>
+        <th>Client</th><th>Clé</th><th>État</th><th>Échéance</th>
+        <th class="nombre">Forfait</th><th class="nombre">Traités</th>
+        <th class="nombre">Restants</th><th>Machine</th><th>Vu le</th>
+        <th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Nouvel abonné</h2>
+    <div class="ligne">
+      <input id="n-client" placeholder="Nom du client" style="min-width:220px">
+      <input id="n-tel" placeholder="Téléphone">
+      <input id="n-email" placeholder="Courriel">
+      <label class="discret">Dossiers
+        <input id="n-dossiers" type="number" value="50" style="width:80px"></label>
+      <label class="discret">Prix FCFA
+        <input id="n-prix" type="number" value="26500" style="width:100px"></label>
+      <label class="discret">Mois
+        <input id="n-mois" type="number" value="1" style="width:64px"></label>
+      <button class="principal" onclick="creer()">Créer la licence</button>
+    </div>
+    <p class="discret">La clé est tirée au sort par le serveur, sans
+       caractères qu'on puisse confondre au téléphone.</p>
+  </section>
+
+  <section>
+    <h2>Dépense de lecture</h2>
+    <div style="overflow-x:auto"><table id="table-depense">
+      <thead><tr>
+        <th>Mois</th><th>Client</th><th class="nombre">Appels</th>
+        <th class="nombre">Francs</th><th class="nombre">Plafond</th>
+        <th>Dernière lecture</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <p class="discret">Ce que la lecture des documents vous coûte, par
+       client et par mois. Le client ne voit jamais ces montants.</p>
+  </section>
+
+  <section>
+    <h2>Version publiée</h2>
+    <div id="version" class="discret"></div>
+  </section>
+
+  <section>
+    <h2>Tentatives d'entrée refusées</h2>
+    <div id="echecs" class="discret"></div>
+    <p class="discret">Sept derniers jours. Chaque échec coûte une
+       seconde d'attente au serveur : essayer des mots de passe au
+       hasard est sans espoir. Une liste qui s'allonge vite reste
+       néanmoins un signal — changez votre mot de passe.</p>
+  </section>
+</main>
+</div>
+
+<script>
+// ---------------------------------------------------------------------
+//  L'adresse et la cle publique sont posees a l'ouverture par
+//  moteur/administration.py. Elles ne sont pas des secrets.
+// ---------------------------------------------------------------------
+const PROJET = "https://qqcbzkzzcryvdwqvmssc.supabase.co";
+const CLE_PUBLIQUE = "sb_publishable_cftP1ciD4qmW8TrXLDSgAw_tG1Kisoq";
+
+//  LE MOT DE PASSE NE VA NULLE PART AILLEURS QUE DANS LA MEMOIRE DE
+//  CETTE PAGE. Ni fichier, ni cookie, ni stockage du navigateur : il
+//  disparait a la fermeture de l'onglet.
+let motDePasse = "";
+
+async function appeler(corps) {
+  const r = await fetch(PROJET + "/functions/v1/admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "apikey": CLE_PUBLIQUE },
+    body: JSON.stringify({ ...corps, mot_de_passe: motDePasse }),
+  });
+  const donnees = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(donnees.erreur || ("erreur " + r.status));
+  return donnees;
+}
+
+function dire(texte, bon = true) {
+  const m = document.getElementById("message");
+  m.textContent = texte;
+  m.style.display = "block";
+  m.style.background = bon ? "#e6f4ec" : "#fdeceb";
+  m.style.color = bon ? "#0d7a4a" : "#b3261e";
+  setTimeout(() => { m.style.display = "none"; }, 6000);
+}
+
+async function entrer() {
+  motDePasse = document.getElementById("motdepasse").value;
+  try {
+    await charger();
+    document.getElementById("porte").hidden = true;
+    document.getElementById("bureau").hidden = false;
+  } catch (e) {
+    document.getElementById("refus").textContent = e.message;
+    motDePasse = "";
+  }
+}
+
+function jours(dateIso) {
+  if (!dateIso) return null;
+  return Math.round((new Date(dateIso) - new Date()) / 86400000);
+}
+
+async function charger() {
+  const d = await appeler({ action: "etat" });
+  dessinerForfaits(d.forfaits);
+  dessinerDepense(d.depense);
+  dessinerResume(d.forfaits, d.depense);
+  const echecs = d.echecs || [];
+  document.getElementById("echecs").innerHTML = echecs.length
+    ? `<b style="color:#b3261e">${echecs.length} tentative(s) refusée(s)</b>` +
+      "<ul>" + echecs.slice(0, 10).map(e =>
+        `<li>${(e.quand || "").slice(0, 16).replace("T", " ")} — ` +
+        `${e.origine || "origine inconnue"}</li>`).join("") + "</ul>"
+    : "Aucune tentative refusée cette semaine.";
+  const v = d.version || {};
+  document.getElementById("version").textContent = v.version
+    ? `Version ${v.version} — ${v.note_de_version || "sans note"}` +
+      (v.publiee === false ? " (dépubliée)" : "")
+    : "aucune version publiée";
+}
+
+function dessinerResume(forfaits, depense) {
+  const actifs = forfaits.filter(f => f.actif).length;
+  const mois = new Date().toISOString().slice(0, 7);
+  const francs = depense
+    .filter(x => String(x.mois).slice(0, 7) === mois)
+    .reduce((s, x) => s + Number(x.francs || 0), 0);
+  const recette = forfaits.filter(f => f.actif)
+    .reduce((s, f) => s + Number(f.abonnement_fcfa || 0), 0);
+  const urgents = forfaits.filter(f =>
+    f.actif && (Number(f.restants) <= 5 || (jours(f.expire_le) ?? 99) <= 7)).length;
+
+  document.getElementById("resume").innerHTML = [
+    ["Abonnés actifs", actifs, ""],
+    ["Recette du cycle", recette.toLocaleString("fr-FR") + " F", ""],
+    ["Lecture ce mois", Math.round(francs).toLocaleString("fr-FR") + " F", ""],
+    ["À relancer", urgents, urgents ? "color:#b3261e" : ""],
+  ].map(([titre, valeur, style]) =>
+    `<div class="carte"><div class="discret">${titre}</div>
+     <div class="chiffre" style="${style}">${valeur}</div></div>`).join("");
+}
+
+function dessinerForfaits(lignes) {
+  const corps = document.querySelector("#table-forfaits tbody");
+  corps.innerHTML = lignes.map(f => {
+    const j = jours(f.expire_le);
+    const restants = Number(f.restants ?? 0);
+    const epuise = !f.actif || restants <= 0 || (j !== null && j < 0);
+    const bientot = restants <= 5 || (j !== null && j <= 7);
+    const etat = !f.actif
+      ? '<span class="puce stop">suspendu</span>'
+      : (j !== null && j < 0)
+        ? '<span class="puce stop">expiré</span>'
+        : restants <= 0
+          ? '<span class="puce stop">forfait épuisé</span>'
+          : bientot
+            ? '<span class="puce attention">bientôt</span>'
+            : '<span class="puce ok">en règle</span>';
+    return `<tr class="${epuise ? "alerte" : bientot ? "bientot" : ""}">
+      <td>${f.client || ""}<div class="discret">${f.telephone || ""}</div></td>
+      <td class="cle">${f.cle}</td>
+      <td>${etat}</td>
+      <td>${f.expire_le || "—"}${j !== null
+          ? `<div class="discret">${j} j</div>` : ""}</td>
+      <td class="nombre">${f.dossiers_inclus ?? "—"}</td>
+      <td class="nombre">${f.dossiers_utilises ?? 0}</td>
+      <td class="nombre"><b>${f.restants ?? "—"}</b></td>
+      <td class="discret">${f.machine ? "liée" : "libre"}</td>
+      <td class="discret">${(f.derniere_visite || "").slice(0, 10) || "jamais"}</td>
+      <td class="ligne">
+        <button onclick="renouveler('${f.cle}')">Renouveler</button>
+        <button onclick="basculer('${f.cle}', ${f.actif})">
+          ${f.actif ? "Suspendre" : "Réactiver"}</button>
+        <button onclick="delier('${f.cle}')">Délier</button>
+        <button onclick="modifier('${f.cle}', ${f.dossiers_inclus ?? 50},
+                ${f.abonnement_fcfa ?? 26500})">Forfait</button>
+      </td></tr>`;
+  }).join("");
+}
+
+function dessinerDepense(lignes) {
+  document.querySelector("#table-depense tbody").innerHTML = lignes.map(x => `
+    <tr><td>${String(x.mois).slice(0, 7)}</td><td>${x.client || x.cle}</td>
+    <td class="nombre">${x.appels ?? 0}</td>
+    <td class="nombre">${Number(x.francs || 0).toLocaleString("fr-FR")}</td>
+    <td class="nombre">${Number(x.plafond || 0).toLocaleString("fr-FR")}</td>
+    <td class="discret">${(x.derniere_lecture || "").slice(0, 16)}</td></tr>`)
+    .join("") || '<tr><td colspan="6" class="discret">aucune lecture</td></tr>';
+}
+
+async function creer() {
+  const client = document.getElementById("n-client").value.trim();
+  if (!client) return dire("Le nom du client manque.", false);
+  try {
+    const r = await appeler({
+      action: "creer", client,
+      telephone: document.getElementById("n-tel").value.trim(),
+      email: document.getElementById("n-email").value.trim(),
+      dossiers_inclus: +document.getElementById("n-dossiers").value,
+      abonnement_fcfa: +document.getElementById("n-prix").value,
+      mois: +document.getElementById("n-mois").value,
+    });
+    document.getElementById("n-client").value = "";
+    document.getElementById("n-tel").value = "";
+    document.getElementById("n-email").value = "";
+    dire(`Clé créée pour ${r.client} : ${r.cle}  (jusqu'au ${r.expire_le})`);
+    prompt("La clé à remettre au client :", r.cle);
+    await charger();
+  } catch (e) { dire(e.message, false); }
+}
+
+async function renouveler(cle) {
+  const mois = prompt("Renouveler pour combien de mois ?", "1");
+  if (!mois) return;
+  //  LE COMPTEUR REPART A ZERO : c'est un forfait neuf, pas un report.
+  if (!confirm(`Renouveler ${cle} pour ${mois} mois ?\n\n` +
+               "Le compteur de dossiers repart à zéro immédiatement.")) return;
+  try {
+    const r = await appeler({ action: "renouveler", cle, mois: +mois });
+    dire(`Renouvelé jusqu'au ${r.expire_le}. Compteur remis à zéro.`);
+    await charger();
+  } catch (e) { dire(e.message, false); }
+}
+
+async function basculer(cle, actif) {
+  const action = actif ? "suspendre" : "reactiver";
+  if (actif && !confirm(`Suspendre ${cle} ?\n\n` +
+      "Le client ne pourra plus traiter de dossier.")) return;
+  try {
+    await appeler({ action, cle });
+    dire(actif ? "Abonnement suspendu." : "Abonnement réactivé.");
+    await charger();
+  } catch (e) { dire(e.message, false); }
+}
+
+async function delier(cle) {
+  if (!confirm(`Délier ${cle} de son ordinateur ?\n\n` +
+      "À faire quand le client change de poste.")) return;
+  try {
+    await appeler({ action: "delier", cle });
+    dire("Machine déliée. La prochaine sera retenue.");
+    await charger();
+  } catch (e) { dire(e.message, false); }
+}
+
+async function modifier(cle, dossiers, prix) {
+  const d = prompt("Nombre de dossiers inclus :", dossiers);
+  if (d === null) return;
+  const p = prompt("Prix de l'abonnement en FCFA :", prix);
+  if (p === null) return;
+  try {
+    await appeler({ action: "modifier", cle,
+                    dossiers_inclus: +d, abonnement_fcfa: +p });
+    dire("Forfait modifié.");
+    await charger();
+  } catch (e) { dire(e.message, false); }
+}
+
+document.getElementById("motdepasse")
+  .addEventListener("keydown", e => { if (e.key === "Enter") entrer(); });
+</script>
+</body>
+</html>
