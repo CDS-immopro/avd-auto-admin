@@ -199,7 +199,7 @@
        néanmoins un signal — changez votre mot de passe.</p>
   </section>
   <p class="discret" style="text-align:center;margin-top:26px">
-     Page fabriquée le <b>19/08/2026 à 16h31</b>.<br>
+     Page fabriquée le <b>19/08/2026 à 17h32</b>.<br>
      Si cette date n'est pas la dernière, faites
      <b>Ctrl + Maj + R</b> : votre navigateur garde l'ancienne en
      mémoire.</p>
@@ -228,6 +228,33 @@ async function appeler(corps) {
   const donnees = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(donnees.erreur || ("erreur " + r.status));
   return donnees;
+}
+
+//  TOUT TEXTE QUI VIENT DE LA BASE PASSE PAR ICI AVANT D'ENTRER
+//  DANS LA PAGE.
+//
+//  POURQUOI, ALORS QUE C'EST VOUS QUI TAPEZ CES NOMS
+//     Pas tous. Le journal des tentatives garde l'APPAREIL de qui
+//     essaie d'entrer, et cela, n'importe qui l'ecrit : il suffit
+//     d'appeler la fonction avec un mauvais mot de passe. Le jour ou
+//     cette colonne s'affiche, un texte pose la s'executerait ICI --
+//     dans la page qui detient votre mot de passe.
+//
+//     La revue de securite du 19/08/2026 l'a trouve avant que cela
+//     n'arrive : la colonne n'etait pas encore montree. On ne laisse
+//     pas une meche en place en comptant sur le fait que personne
+//     n'y touchera.
+//
+//  PAS DE MOTIF /.../ ICI NON PLUS : on decoupe et on recolle. La
+//  serie d'essais relit ce script, et un guillemet dans un motif la
+//  ferait crier a tort (meme raison qu'a l'export CSV).
+function echapper(valeur) {
+  return String(valeur ?? "")
+    .split("&").join("&amp;")
+    .split("<").join("&lt;")
+    .split(">").join("&gt;")
+    .split('"').join("&quot;")
+    .split("'").join("&#39;");
 }
 
 function dire(texte, bon = true) {
@@ -291,8 +318,8 @@ async function charger() {
   document.getElementById("echecs").innerHTML = echecs.length
     ? `<b style="color:#b3261e">${echecs.length} tentative(s) refusée(s)</b>` +
       "<ul>" + echecs.slice(0, 10).map(e =>
-        `<li>${(e.quand || "").slice(0, 16).replace("T", " ")} — ` +
-        `${e.origine || "origine inconnue"}</li>`).join("") + "</ul>"
+        `<li>${echapper((e.quand || "").slice(0, 16).replace("T", " "))} — ` +
+        `${echapper(e.origine || "origine inconnue")}</li>`).join("") + "</ul>"
     : "Aucune tentative refusée cette semaine.";
   const v = d.version || {};
   document.getElementById("version").textContent = v.version
@@ -371,11 +398,11 @@ function dessinerForfaits(lignes) {
 
     return `<tr class="${epuise ? "alerte" : bientot ? "bientot" : ""}">
       <td><a href="#fiche" onclick="fiche(${rang});return false"
-             style="color:inherit">${f.client || "(sans nom)"}</a>
-          <div class="discret">${f.telephone || ""}</div></td>
-      <td class="cle">${f.cle}</td>
+             style="color:inherit">${echapper(f.client || "(sans nom)")}</a>
+          <div class="discret">${echapper(f.telephone || "")}</div></td>
+      <td class="cle">${echapper(f.cle)}</td>
       <td>${etat}</td>
-      <td>${f.expire_le || "—"}${j !== null
+      <td>${echapper(f.expire_le || "—")}${j !== null
           ? `<div class="discret">${j} j</div>` : ""}</td>
       <td class="nombre">${f.dossiers_inclus ?? "—"}</td>
       <td class="nombre">${f.dossiers_utilises ?? 0}</td>
@@ -384,11 +411,11 @@ function dessinerForfaits(lignes) {
       <td class="discret">${f.machine ? "liée" : "libre"}</td>
       <td class="discret">${quand(f.derniere_visite) || "jamais"}</td>
       <td class="ligne">
-        <button onclick="renouveler('${f.cle}')">Renouveler</button>
-        <button onclick="basculer('${f.cle}', ${f.actif})">
+        <button onclick="renouveler(${rang})">Renouveler</button>
+        <button onclick="basculer(${rang})">
           ${f.actif ? "Suspendre" : "Réactiver"}</button>
         <button onclick="modifier(${rang})">Modifier</button>
-        <button onclick="delier('${f.cle}')">Libérer la machine</button>
+        <button onclick="delier(${rang})">Libérer la machine</button>
         <button class="danger" onclick="supprimer(${rang})">Supprimer</button>
       </td></tr>`;
   }).join("");
@@ -396,7 +423,8 @@ function dessinerForfaits(lignes) {
 
 function dessinerDepense(lignes) {
   document.querySelector("#table-depense tbody").innerHTML = lignes.map(x => `
-    <tr><td>${String(x.mois).slice(0, 7)}</td><td>${x.client || x.cle}</td>
+    <tr><td>${echapper(String(x.mois).slice(0, 7))}</td>
+    <td>${echapper(x.client || x.cle)}</td>
     <td class="nombre">${x.appels ?? 0}</td>
     <td class="nombre">${Number(x.francs || 0).toLocaleString("fr-FR")}</td>
     <td class="nombre">${Number(x.plafond || 0).toLocaleString("fr-FR")}</td>
@@ -442,11 +470,14 @@ async function creer() {
   } catch (e) { dire(e.message, false); }
 }
 
-async function renouveler(cle) {
+async function renouveler(rang) {
+  const f = LIGNES[rang];
+  if (!f) return;
+  const cle = f.cle;
   const mois = prompt("Renouveler pour combien de mois ?", "1");
   if (!mois) return;
   //  LE COMPTEUR REPART A ZERO : c'est un forfait neuf, pas un report.
-  if (!confirm(`Renouveler ${cle} pour ${mois} mois ?\n\n` +
+  if (!confirm(`Renouveler ${f.client || cle} pour ${mois} mois ?\n\n` +
                "Le compteur de dossiers repart à zéro immédiatement.")) return;
   try {
     const r = await appeler({ action: "renouveler", cle, mois: +mois });
@@ -455,9 +486,13 @@ async function renouveler(cle) {
   } catch (e) { dire(e.message, false); }
 }
 
-async function basculer(cle, actif) {
+async function basculer(rang) {
+  const f = LIGNES[rang];
+  if (!f) return;
+  const cle = f.cle;
+  const actif = f.actif;
   const action = actif ? "suspendre" : "reactiver";
-  if (actif && !confirm(`Suspendre ${cle} ?\n\n` +
+  if (actif && !confirm(`Suspendre ${f.client || cle} ?\n\n` +
       "Le client ne pourra plus traiter de dossier.")) return;
   try {
     await appeler({ action, cle });
@@ -466,8 +501,11 @@ async function basculer(cle, actif) {
   } catch (e) { dire(e.message, false); }
 }
 
-async function delier(cle) {
-  if (!confirm(`Libérer ${cle} de son ordinateur ?\n\n` +
+async function delier(rang) {
+  const f = LIGNES[rang];
+  if (!f) return;
+  const cle = f.cle;
+  if (!confirm(`Libérer ${f.client || cle} de son ordinateur ?\n\n` +
       "À faire quand le client change de poste. Le prochain\n" +
       "ordinateur qui se connecte sera retenu à sa place.")) return;
   try {
@@ -529,7 +567,8 @@ async function supprimer(rang) {
   const client = f.client || "ce client";
   const tape = prompt(
     "SUPPRIMER définitivement la licence de " + client + " ?\n\n" +
-    "Cette ligne et ses dossiers comptés seront effacés, sans retour.\n" +
+    "Sont effacés avec elle, sans retour : ses dossiers comptés,\n" +
+    "SES PAIEMENTS, et son historique de lecture.\n" +
     "Recopiez la clé pour confirmer :\n\n" + cle, "");
   if (tape === null) return;
   if (tape.trim().toUpperCase() !== cle) {
@@ -585,9 +624,14 @@ function sou(n) {
   return Number(n || 0).toLocaleString("fr-FR");
 }
 
+//  LA CLE DE LA FICHE OUVERTE. Les boutons de la fiche la prennent
+//  ici, au lieu de se la faire passer par un attribut.
+let FICHE = null;
+
 async function fiche(rang) {
   const f = LIGNES[rang];
   if (!f) return;
+  FICHE = f.cle;
   try {
     const d = await appeler({ action: "fiche", cle: f.cle });
     const l = d.licence || {};
@@ -595,13 +639,13 @@ async function fiche(rang) {
     bloc.innerHTML = `
       <div class="cartes">
         <div class="carte"><div class="discret">Client</div>
-          <b>${l.client || ""}</b>
-          <div class="discret">${l.structure || ""}</div>
-          <div class="discret">${l.telephone || "—"}</div>
-          <div class="discret">WhatsApp ${l.whatsapp || "—"}</div>
-          <div class="discret">${l.email || "—"}</div></div>
+          <b>${echapper(l.client || "")}</b>
+          <div class="discret">${echapper(l.structure || "")}</div>
+          <div class="discret">${echapper(l.telephone || "—")}</div>
+          <div class="discret">WhatsApp ${echapper(l.whatsapp || "—")}</div>
+          <div class="discret">${echapper(l.email || "—")}</div></div>
         <div class="carte"><div class="discret">Clé</div>
-          <b class="cle">${l.cle}</b>
+          <b class="cle">${echapper(l.cle)}</b>
           <div class="discret">créée le
             ${quand(l.cree_le, false) || "—"}</div></div>
         <div class="carte"><div class="discret">Forfait</div>
@@ -610,8 +654,9 @@ async function fiche(rang) {
           <div class="discret">${l.dossiers_utilises ?? 0} sur
             ${l.dossiers_inclus ?? "—"} dossiers</div></div>
         <div class="carte"><div class="discret">Apporteur</div>
-          <b>${l.apporteur || "—"}</b>
-          <div class="discret">échéance ${l.expire_le || "—"}</div></div>
+          <b>${echapper(l.apporteur || "—")}</b>
+          <div class="discret">échéance
+            ${echapper(l.expire_le || "—")}</div></div>
         <div class="carte"><div class="discret">Dossiers en tout</div>
           <b>${d.dossiers_en_tout ?? 0}</b>
           <div class="discret">machine
@@ -622,23 +667,23 @@ async function fiche(rang) {
             versement(s)</div></div>
       </div>
       <div class="ligne" style="margin-top:12px">
-        <button class="principal" onclick="payer('${l.cle}')">
+        <button class="principal" onclick="payer()">
           Enregistrer un paiement</button>
-        <button onclick="regenerer('${l.cle}')">
+        <button onclick="regenerer()">
           Générer un nouveau code</button>
       </div>
-      ${l.note ? `<p class="discret">Note : ${l.note}</p>` : ""}
+      ${l.note ? `<p class="discret">Note : ${echapper(l.note)}</p>` : ""}
       <h3 style="font-size:14px;margin:18px 0 6px">Paiements reçus</h3>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Date</th><th class="nombre">Montant</th>
           <th class="nombre">Forfaits</th><th>Moyen</th>
           <th>Note</th></tr></thead>
         <tbody>${(d.paiements || []).map(p => `<tr>
-          <td>${quand(p.paye_le, false)}</td>
+          <td>${echapper(quand(p.paye_le, false))}</td>
           <td class="nombre">${sou(p.montant_fcfa)}</td>
           <td class="nombre">${p.forfaits ?? 1}</td>
-          <td class="discret">${p.moyen || "—"}</td>
-          <td class="discret">${p.note || ""}</td></tr>`).join("")
+          <td class="discret">${echapper(p.moyen || "—")}</td>
+          <td class="discret">${echapper(p.note || "")}</td></tr>`).join("")
           || '<tr><td colspan="5" class="discret">aucun paiement enregistré</td></tr>'}
         </tbody>
       </table></div>
@@ -672,7 +717,7 @@ function moisDeLaFiche(d) {
   if (!lignes.length) {
     return '<tr><td colspan="4" class="discret">aucun dossier</td></tr>';
   }
-  return lignes.map(m => `<tr><td>${m.mois}</td>
+  return lignes.map(m => `<tr><td>${echapper(m.mois)}</td>
     <td class="nombre">${m.dossiers}</td>
     <td class="nombre">${m.appels}</td>
     <td class="nombre">${sou(Math.round(m.francs))}</td></tr>`).join("");
@@ -720,7 +765,8 @@ async function rapport() {
           <th class="nombre">Coût</th><th class="nombre">Marge</th>
           <th class="nombre">Commission</th></tr></thead>
         <tbody>${(d.detail || []).map(l => `<tr>
-          <td>${l.client || ""}</td><td class="discret">${l.apporteur || "—"}</td>
+          <td>${echapper(l.client || "")}</td>
+          <td class="discret">${echapper(l.apporteur || "—")}</td>
           <td class="nombre">${l.dossiers}</td>
           <td class="nombre">${sou(l.recette_fcfa)}</td>
           <td class="nombre">${sou(l.cout_lecture_fcfa)}</td>
@@ -780,7 +826,9 @@ function exporterRapport() {
 //  Le montant part vide : le serveur pose alors le prix du forfait,
 //  multiplie par le nombre de forfaits. C'est le cas courant, et le
 //  retaper serait une occasion de se tromper.
-async function payer(cle) {
+async function payer() {
+  const cle = FICHE;
+  if (!cle) return;
   const forfaits = prompt("Combien de forfaits ce versement couvre-t-il ?",
                           "1");
   if (forfaits === null) return;
@@ -808,7 +856,9 @@ async function payer(cle) {
 //  UNE CLE QUI A CIRCULE SE REMPLACE. L'ancienne n'est pas supprimee :
 //  elle est suspendue, et garde son historique de facturation. Les
 //  deux lignes se nomment l'une l'autre dans leur note.
-async function regenerer(cle) {
+async function regenerer() {
+  const cle = FICHE;
+  if (!cle) return;
   if (!confirm("Générer un NOUVEAU code pour ce client ?\n\n" +
       "L'ancien code cessera de fonctionner : le client devra saisir\n" +
       "le nouveau. Son historique reste attaché à l'ancienne ligne,\n" +
@@ -852,7 +902,7 @@ async function commissions() {
         <div style="border:1px solid var(--trait);border-radius:9px;
                     padding:12px;margin-top:12px">
           <div class="ligne" style="justify-content:space-between">
-            <div><b>${a.apporteur}</b>
+            <div><b>${echapper(a.apporteur)}</b>
               <span class="discret">— ${a.clients.length} client(s),
                 ${sou(a.encaisse_fcfa)} F encaissés</span></div>
             <div>${a.versee
@@ -868,7 +918,7 @@ async function commissions() {
             <thead><tr><th>Client</th><th class="nombre">Encaissé</th>
               <th class="nombre">Coût</th><th class="nombre">Marge</th>
               <th class="nombre">Commission</th></tr></thead>
-            <tbody>${a.clients.map(c => `<tr><td>${c.client}</td>
+            <tbody>${a.clients.map(c => `<tr><td>${echapper(c.client)}</td>
               <td class="nombre">${sou(c.encaisse_fcfa)}</td>
               <td class="nombre">${sou(c.cout_lecture_fcfa)}</td>
               <td class="nombre">${sou(c.marge_fcfa)}</td>
