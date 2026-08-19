@@ -185,7 +185,7 @@
        néanmoins un signal — changez votre mot de passe.</p>
   </section>
   <p class="discret" style="text-align:center;margin-top:26px">
-     Page fabriquée le <b>19/08/2026 à 16h03</b>.<br>
+     Page fabriquée le <b>19/08/2026 à 16h15</b>.<br>
      Si cette date n'est pas la dernière, faites
      <b>Ctrl + Maj + R</b> : votre navigateur garde l'ancienne en
      mémoire.</p>
@@ -240,6 +240,23 @@ async function entrer() {
 function jours(dateIso) {
   if (!dateIso) return null;
   return Math.round((new Date(dateIso) - new Date()) / 86400000);
+}
+
+//  LE JOUR ET L'HEURE, A L'HEURE D'ICI.
+//
+//  La colonne « Vu le » ne portait que le jour, et le serveur garde
+//  ses dates en heure universelle. Deux consequences : on ne savait
+//  pas si un client s'etait connecte ce matin ou cette nuit, et un
+//  passage a 23 h paraissait dater du lendemain. `toLocaleString`
+//  ramene tout a l'heure du Benin, celle de l'ordinateur qui regarde.
+function quand(valeur, avecHeure = true) {
+  if (!valeur) return "";
+  const d = new Date(valeur);
+  if (isNaN(d)) return String(valeur).slice(0, 16);
+  const jour = d.toLocaleDateString("fr-FR");
+  if (!avecHeure) return jour;
+  return jour + " " + d.toLocaleTimeString("fr-FR",
+    { hour: "2-digit", minute: "2-digit" }).replace(":", "h");
 }
 
 async function charger() {
@@ -349,7 +366,7 @@ function dessinerForfaits(lignes) {
       <td class="nombre"><b>${f.restants ?? "—"}</b></td>
       <td class="discret">${enCours} sur ${payes}</td>
       <td class="discret">${f.machine ? "liée" : "libre"}</td>
-      <td class="discret">${(f.derniere_visite || "").slice(0, 10) || "jamais"}</td>
+      <td class="discret">${quand(f.derniere_visite) || "jamais"}</td>
       <td class="ligne">
         <button onclick="renouveler('${f.cle}')">Renouveler</button>
         <button onclick="basculer('${f.cle}', ${f.actif})">
@@ -367,7 +384,7 @@ function dessinerDepense(lignes) {
     <td class="nombre">${x.appels ?? 0}</td>
     <td class="nombre">${Number(x.francs || 0).toLocaleString("fr-FR")}</td>
     <td class="nombre">${Number(x.plafond || 0).toLocaleString("fr-FR")}</td>
-    <td class="discret">${(x.derniere_lecture || "").slice(0, 16)}</td></tr>`)
+    <td class="discret">${quand(x.derniere_lecture)}</td></tr>`)
     .join("") || '<tr><td colspan="6" class="discret">aucune lecture</td></tr>';
 }
 
@@ -566,7 +583,7 @@ async function fiche(rang) {
         <div class="carte"><div class="discret">Clé</div>
           <b class="cle">${l.cle}</b>
           <div class="discret">créée le
-            ${String(l.cree_le || "").slice(0, 10) || "—"}</div></div>
+            ${quand(l.cree_le, false) || "—"}</div></div>
         <div class="carte"><div class="discret">Forfait</div>
           <b>${l.forfait_en_cours ?? 1} sur ${l.forfaits_payes ?? 1}</b>
           <div class="discret">${sou(l.abonnement_fcfa)} F par forfait</div>
