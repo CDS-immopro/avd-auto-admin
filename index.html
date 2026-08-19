@@ -119,6 +119,22 @@
        caractères qu'on puisse confondre au téléphone.</p>
   </section>
 
+  <section id="fiche" hidden>
+    <h2>Fiche du client</h2>
+    <div id="fiche-corps"></div>
+  </section>
+
+  <section>
+    <h2>Rapport du mois</h2>
+    <div class="ligne">
+      <label class="discret">Mois
+        <input id="rap-mois" type="month" style="width:150px"></label>
+      <button class="principal" onclick="rapport()">Voir</button>
+      <button onclick="exporterRapport()">Exporter en CSV</button>
+    </div>
+    <div id="rapport-corps"></div>
+  </section>
+
   <section>
     <h2>Réglages commerciaux</h2>
     <div class="ligne">
@@ -169,7 +185,7 @@
        néanmoins un signal — changez votre mot de passe.</p>
   </section>
   <p class="discret" style="text-align:center;margin-top:26px">
-     Page fabriquée le <b>19/08/2026 à 14h38</b>.<br>
+     Page fabriquée le <b>19/08/2026 à 16h03</b>.<br>
      Si cette date n'est pas la dernière, faites
      <b>Ctrl + Maj + R</b> : votre navigateur garde l'ancienne en
      mémoire.</p>
@@ -230,6 +246,12 @@ async function charger() {
   const d = await appeler({ action: "etat" });
   dessinerForfaits(d.forfaits);
   dessinerReglages(d.reglages);
+  //  Le mois courant est pose une seule fois : le retaper a chaque
+  //  chargement effacerait celui qu'on vient de choisir.
+  const champMois = document.getElementById("rap-mois");
+  if (champMois && !champMois.value) {
+    champMois.value = new Date().toISOString().slice(0, 7);
+  }
   dessinerDepense(d.depense);
   dessinerResume(d.forfaits, d.depense);
   const echecs = d.echecs || [];
@@ -315,7 +337,9 @@ function dessinerForfaits(lignes) {
               : '<span class="puce ok">en règle</span>';
 
     return `<tr class="${epuise ? "alerte" : bientot ? "bientot" : ""}">
-      <td>${f.client || ""}<div class="discret">${f.telephone || ""}</div></td>
+      <td><a href="#fiche" onclick="fiche(${rang});return false"
+             style="color:inherit">${f.client || "(sans nom)"}</a>
+          <div class="discret">${f.telephone || ""}</div></td>
       <td class="cle">${f.cle}</td>
       <td>${etat}</td>
       <td>${f.expire_le || "—"}${j !== null
@@ -440,6 +464,7 @@ async function modifier(rang) {
     ["abonnement_fcfa", "Prix d'un forfait, en FCFA :"],
     ["forfaits_payes",  "Nombre de forfaits payés :"],
     ["expire_le",       "Échéance du forfait en cours (AAAA-MM-JJ) :"],
+    ["apporteur",       "Apporteur d'affaires :"],
     ["note",            "Note interne :"],
   ];
   const envoi = { action: "modifier", cle: f.cle };
@@ -513,6 +538,178 @@ async function regler() {
     dessinerReglages(r.reglages);
     dire("Réglages enregistrés.");
   } catch (e) { dire(e.message, false); }
+}
+
+// ---------------------------------------------------------------------
+//  LA FICHE D'UN CLIENT
+// ---------------------------------------------------------------------
+//  La liste doit rester lisible : elle ne peut pas porter en plus la
+//  note, l'apporteur, l'historique de lecture et les dossiers mois par
+//  mois. Le nom du client ouvre donc sa fiche, a la demande.
+function sou(n) {
+  return Number(n || 0).toLocaleString("fr-FR");
+}
+
+async function fiche(rang) {
+  const f = LIGNES[rang];
+  if (!f) return;
+  try {
+    const d = await appeler({ action: "fiche", cle: f.cle });
+    const l = d.licence || {};
+    const bloc = document.getElementById("fiche-corps");
+    bloc.innerHTML = `
+      <div class="cartes">
+        <div class="carte"><div class="discret">Client</div>
+          <b>${l.client || ""}</b>
+          <div class="discret">${l.telephone || "—"}</div>
+          <div class="discret">${l.email || "—"}</div></div>
+        <div class="carte"><div class="discret">Clé</div>
+          <b class="cle">${l.cle}</b>
+          <div class="discret">créée le
+            ${String(l.cree_le || "").slice(0, 10) || "—"}</div></div>
+        <div class="carte"><div class="discret">Forfait</div>
+          <b>${l.forfait_en_cours ?? 1} sur ${l.forfaits_payes ?? 1}</b>
+          <div class="discret">${sou(l.abonnement_fcfa)} F par forfait</div>
+          <div class="discret">${l.dossiers_utilises ?? 0} sur
+            ${l.dossiers_inclus ?? "—"} dossiers</div></div>
+        <div class="carte"><div class="discret">Apporteur</div>
+          <b>${l.apporteur || "—"}</b>
+          <div class="discret">échéance ${l.expire_le || "—"}</div></div>
+        <div class="carte"><div class="discret">Dossiers en tout</div>
+          <b>${d.dossiers_en_tout ?? 0}</b>
+          <div class="discret">machine
+            ${l.machine ? "liée" : "libre"}</div></div>
+      </div>
+      ${l.note ? `<p class="discret">Note : ${l.note}</p>` : ""}
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Mois</th><th class="nombre">Dossiers</th>
+          <th class="nombre">Appels de lecture</th>
+          <th class="nombre">Coût FCFA</th></tr></thead>
+        <tbody>${moisDeLaFiche(d)}</tbody>
+      </table></div>`;
+    document.getElementById("fiche").hidden = false;
+    document.getElementById("fiche").scrollIntoView({ behavior: "smooth" });
+  } catch (e) { dire(e.message, false); }
+}
+
+//  LES DEUX HISTORIQUES N'ONT PAS LES MEMES MOIS : un mois sans
+//  lecture peut porter des dossiers, et l'inverse arrive aussi. On les
+//  reunit, sinon une ligne disparait sans que personne le sache.
+function moisDeLaFiche(d) {
+  const par = {};
+  for (const x of d.dossiers_par_mois || []) {
+    par[x.mois] = { mois: x.mois, dossiers: x.dossiers, appels: 0, francs: 0 };
+  }
+  for (const x of d.lectures || []) {
+    const m = par[x.mois] || (par[x.mois] =
+      { mois: x.mois, dossiers: 0, appels: 0, francs: 0 });
+    m.appels = x.appels || 0;
+    m.francs = x.francs || 0;
+  }
+  const lignes = Object.values(par).sort((a, b) => (a.mois < b.mois ? 1 : -1));
+  if (!lignes.length) {
+    return '<tr><td colspan="4" class="discret">aucun dossier</td></tr>';
+  }
+  return lignes.map(m => `<tr><td>${m.mois}</td>
+    <td class="nombre">${m.dossiers}</td>
+    <td class="nombre">${m.appels}</td>
+    <td class="nombre">${sou(Math.round(m.francs))}</td></tr>`).join("");
+}
+
+
+// ---------------------------------------------------------------------
+//  LE RAPPORT DU MOIS
+// ---------------------------------------------------------------------
+//  « Un pourcentage sur tout le montant, soit sur la marge. »
+//  Le calcul se fait au serveur, avec le reglage du moment : la page
+//  ne fait que montrer, et exporter.
+let RAPPORT = null;
+
+async function rapport() {
+  const mois = document.getElementById("rap-mois").value
+    || new Date().toISOString().slice(0, 7);
+  try {
+    const d = await appeler({ action: "rapport", mois });
+    RAPPORT = d;
+    const t = d.totaux || {};
+    const surQuoi = d.base === "marge" ? "la marge" : "le montant total";
+    document.getElementById("rapport-corps").innerHTML = `
+      <p class="discret">Commission de <b>${d.taux} %</b> sur
+        <b>${surQuoi}</b>${d.cout_impose > 0
+          ? `, coût de lecture imposé à ${sou(d.cout_impose)} F`
+          : ", coût de lecture réel mesuré"}.</p>
+      <div class="cartes">
+        <div class="carte"><div class="discret">Clients</div>
+          <b>${t.clients ?? 0}</b></div>
+        <div class="carte"><div class="discret">Dossiers</div>
+          <b>${t.dossiers ?? 0}</b></div>
+        <div class="carte"><div class="discret">Recette</div>
+          <b>${sou(t.recette_fcfa)} F</b></div>
+        <div class="carte"><div class="discret">Coût de lecture</div>
+          <b>${sou(t.cout_lecture_fcfa)} F</b></div>
+        <div class="carte"><div class="discret">Marge</div>
+          <b>${sou(t.marge_fcfa)} F</b></div>
+        <div class="carte"><div class="discret">Commission</div>
+          <b>${sou(t.commission_fcfa)} F</b></div>
+      </div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Client</th><th>Apporteur</th>
+          <th class="nombre">Dossiers</th><th class="nombre">Recette</th>
+          <th class="nombre">Coût</th><th class="nombre">Marge</th>
+          <th class="nombre">Commission</th></tr></thead>
+        <tbody>${(d.detail || []).map(l => `<tr>
+          <td>${l.client || ""}</td><td class="discret">${l.apporteur || "—"}</td>
+          <td class="nombre">${l.dossiers}</td>
+          <td class="nombre">${sou(l.recette_fcfa)}</td>
+          <td class="nombre">${sou(l.cout_lecture_fcfa)}</td>
+          <td class="nombre">${sou(l.marge_fcfa)}</td>
+          <td class="nombre"><b>${sou(l.commission_fcfa)}</b></td></tr>`)
+          .join("") || '<tr><td colspan="7" class="discret">aucun dossier ce mois-ci</td></tr>'}
+        </tbody>
+      </table></div>`;
+  } catch (e) { dire(e.message, false); }
+}
+
+//  L'EXPORT SE FAIT ICI, SANS RIEN DEMANDER AU SERVEUR. Le rapport est
+//  deja sous les yeux : le renvoyer chercher pour le recopier serait
+//  une occasion de plus de le voir differer de l'ecran.
+//
+//  LE POINT-VIRGULE, ET NON LA VIRGULE : Excel en francais decoupe sur
+//  le point-virgule. Avec des virgules, tout arrive dans une colonne.
+function exporterRapport() {
+  if (!RAPPORT) return dire("Affichez d'abord un mois.", false);
+  const t = RAPPORT.totaux || {};
+  const lignes = [
+    ["Client", "Apporteur", "Dossiers", "Recette FCFA", "Cout FCFA",
+     "Marge FCFA", "Commission FCFA"],
+    ...(RAPPORT.detail || []).map(l => [
+      l.client || "", l.apporteur || "", l.dossiers, l.recette_fcfa,
+      l.cout_lecture_fcfa, l.marge_fcfa, l.commission_fcfa]),
+    ["TOTAL", "", t.dossiers, t.recette_fcfa, t.cout_lecture_fcfa,
+     t.marge_fcfa, t.commission_fcfa],
+  ];
+  const csv = lignes.map(l => l.map(c => {
+    const v = String(c ?? "");
+    //  PAS DE MOTIF /.../ AVEC UN GUILLEMET DEDANS. La serie
+    //  d'essais relit ce script pour verifier que chaque chaine se
+    //  ferme sur sa ligne -- c'est elle qui a rattrape la page muette
+    //  du 19/08/2026. Un guillemet cache dans un motif la ferait
+    //  crier a tort, et une serie qui crie a tort ne sert plus.
+    const delicat = v.includes('"') || v.includes(';')
+                    || v.includes('\n');
+    return delicat ? '"' + v.split('"').join('""') + '"' : v;
+  }).join(";")).join("\n");
+
+  //  L'ACCENT AIGU DOIT SURVIVRE A EXCEL : sans ce marqueur en tete,
+  //  « Société » arrive en « SociÃ©tÃ© ».
+  const fichier = new Blob(["\uFEFF" + csv],
+                           { type: "text/csv;charset=utf-8" });
+  const lien = document.createElement("a");
+  lien.href = URL.createObjectURL(fichier);
+  lien.download = `avd-auto-rapport-${RAPPORT.mois}.csv`;
+  lien.click();
+  URL.revokeObjectURL(lien.href);
+  dire("Rapport exporté.");
 }
 
 document.getElementById("motdepasse")
