@@ -136,6 +136,20 @@
   </section>
 
   <section>
+    <h2>Commissions par apporteur</h2>
+    <div class="ligne">
+      <label class="discret">Mois
+        <input id="com-mois" type="month" style="width:150px"></label>
+      <button class="principal" onclick="commissions()">Voir</button>
+    </div>
+    <div id="commissions-corps"></div>
+    <p class="discret">La commission porte sur ce qui est
+       <b>réellement encaissé</b> dans le mois, pas sur les abonnements
+       en cours : on ne paie pas un apporteur pour un client qui n'a pas
+       encore réglé.</p>
+  </section>
+
+  <section>
     <h2>Réglages commerciaux</h2>
     <div class="ligne">
       <label class="discret">Commission %
@@ -185,7 +199,7 @@
        néanmoins un signal — changez votre mot de passe.</p>
   </section>
   <p class="discret" style="text-align:center;margin-top:26px">
-     Page fabriquée le <b>19/08/2026 à 16h15</b>.<br>
+     Page fabriquée le <b>19/08/2026 à 16h31</b>.<br>
      Si cette date n'est pas la dernière, faites
      <b>Ctrl + Maj + R</b> : votre navigateur garde l'ancienne en
      mémoire.</p>
@@ -265,9 +279,11 @@ async function charger() {
   dessinerReglages(d.reglages);
   //  Le mois courant est pose une seule fois : le retaper a chaque
   //  chargement effacerait celui qu'on vient de choisir.
-  const champMois = document.getElementById("rap-mois");
-  if (champMois && !champMois.value) {
-    champMois.value = new Date().toISOString().slice(0, 7);
+  for (const id of ["rap-mois", "com-mois"]) {
+    const champ = document.getElementById(id);
+    if (champ && !champ.value) {
+      champ.value = new Date().toISOString().slice(0, 7);
+    }
   }
   dessinerDepense(d.depense);
   dessinerResume(d.forfaits, d.depense);
@@ -477,6 +493,8 @@ async function modifier(rang) {
     ["client",          "Nom du client :"],
     ["telephone",       "Téléphone :"],
     ["email",           "Courriel :"],
+    ["whatsapp",        "WhatsApp :"],
+    ["structure",       "Structure (raison sociale) :"],
     ["dossiers_inclus", "Dossiers inclus dans un forfait :"],
     ["abonnement_fcfa", "Prix d'un forfait, en FCFA :"],
     ["forfaits_payes",  "Nombre de forfaits payés :"],
@@ -578,7 +596,9 @@ async function fiche(rang) {
       <div class="cartes">
         <div class="carte"><div class="discret">Client</div>
           <b>${l.client || ""}</b>
+          <div class="discret">${l.structure || ""}</div>
           <div class="discret">${l.telephone || "—"}</div>
+          <div class="discret">WhatsApp ${l.whatsapp || "—"}</div>
           <div class="discret">${l.email || "—"}</div></div>
         <div class="carte"><div class="discret">Clé</div>
           <b class="cle">${l.cle}</b>
@@ -596,8 +616,33 @@ async function fiche(rang) {
           <b>${d.dossiers_en_tout ?? 0}</b>
           <div class="discret">machine
             ${l.machine ? "liée" : "libre"}</div></div>
+        <div class="carte"><div class="discret">Payé en tout</div>
+          <b>${sou(d.paye_en_tout_fcfa)} F</b>
+          <div class="discret">${(d.paiements || []).length}
+            versement(s)</div></div>
+      </div>
+      <div class="ligne" style="margin-top:12px">
+        <button class="principal" onclick="payer('${l.cle}')">
+          Enregistrer un paiement</button>
+        <button onclick="regenerer('${l.cle}')">
+          Générer un nouveau code</button>
       </div>
       ${l.note ? `<p class="discret">Note : ${l.note}</p>` : ""}
+      <h3 style="font-size:14px;margin:18px 0 6px">Paiements reçus</h3>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Date</th><th class="nombre">Montant</th>
+          <th class="nombre">Forfaits</th><th>Moyen</th>
+          <th>Note</th></tr></thead>
+        <tbody>${(d.paiements || []).map(p => `<tr>
+          <td>${quand(p.paye_le, false)}</td>
+          <td class="nombre">${sou(p.montant_fcfa)}</td>
+          <td class="nombre">${p.forfaits ?? 1}</td>
+          <td class="discret">${p.moyen || "—"}</td>
+          <td class="discret">${p.note || ""}</td></tr>`).join("")
+          || '<tr><td colspan="5" class="discret">aucun paiement enregistré</td></tr>'}
+        </tbody>
+      </table></div>
+      <h3 style="font-size:14px;margin:18px 0 6px">Dossiers et lecture</h3>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Mois</th><th class="nombre">Dossiers</th>
           <th class="nombre">Appels de lecture</th>
@@ -727,6 +772,151 @@ function exporterRapport() {
   lien.click();
   URL.revokeObjectURL(lien.href);
   dire("Rapport exporté.");
+}
+
+// ---------------------------------------------------------------------
+//  ENREGISTRER UN PAIEMENT, ET REGENERER UNE CLE
+// ---------------------------------------------------------------------
+//  Le montant part vide : le serveur pose alors le prix du forfait,
+//  multiplie par le nombre de forfaits. C'est le cas courant, et le
+//  retaper serait une occasion de se tromper.
+async function payer(cle) {
+  const forfaits = prompt("Combien de forfaits ce versement couvre-t-il ?",
+                          "1");
+  if (forfaits === null) return;
+  const montant = prompt(
+    "Montant reçu, en FCFA :\n(laissez vide pour le prix du forfait)", "");
+  if (montant === null) return;
+  const moyen = prompt("Moyen (espèces, Momo, virement...) :", "");
+  if (moyen === null) return;
+  const date = prompt("Date du versement (AAAA-MM-JJ) :",
+                      new Date().toISOString().slice(0, 10));
+  if (date === null) return;
+  try {
+    await appeler({
+      action: "payer", cle,
+      forfaits: Number(forfaits) || 1,
+      montant_fcfa: montant.trim() === "" ? undefined : Number(montant),
+      moyen: moyen.trim(),
+      paye_le: date.trim(),
+    });
+    dire("Paiement enregistré.");
+    await fiche(LIGNES.findIndex(l => l.cle === cle));
+  } catch (e) { dire(e.message, false); }
+}
+
+//  UNE CLE QUI A CIRCULE SE REMPLACE. L'ancienne n'est pas supprimee :
+//  elle est suspendue, et garde son historique de facturation. Les
+//  deux lignes se nomment l'une l'autre dans leur note.
+async function regenerer(cle) {
+  if (!confirm("Générer un NOUVEAU code pour ce client ?\n\n" +
+      "L'ancien code cessera de fonctionner : le client devra saisir\n" +
+      "le nouveau. Son historique reste attaché à l'ancienne ligne,\n" +
+      "qui sera suspendue et non supprimée.")) return;
+  try {
+    const r = await appeler({ action: "regenerer", cle });
+    await charger();
+    dire("Nouveau code : " + r.cle);
+    alert("Nouveau code pour " + (r.client || "ce client") + " :\n\n" +
+          r.cle + "\n\nRemettez-le au client. L'ancien ne fonctionne plus.");
+  } catch (e) { dire(e.message, false); }
+}
+
+
+// ---------------------------------------------------------------------
+//  LES COMMISSIONS, PAR APPORTEUR
+// ---------------------------------------------------------------------
+let COMMISSIONS = null;
+
+async function commissions() {
+  const mois = document.getElementById("com-mois").value
+    || new Date().toISOString().slice(0, 7);
+  try {
+    const d = await appeler({ action: "commissions", mois });
+    COMMISSIONS = d;
+    const t = d.totaux || {};
+    document.getElementById("commissions-corps").innerHTML = `
+      <p class="discret">Commission de <b>${d.taux} %</b> sur
+        <b>${d.base === "marge" ? "la marge" : "le montant encaissé"}</b>.</p>
+      <div class="cartes">
+        <div class="carte"><div class="discret">Apporteurs</div>
+          <b>${t.apporteurs ?? 0}</b></div>
+        <div class="carte"><div class="discret">Encaissé ce mois</div>
+          <b>${sou(t.encaisse_fcfa)} F</b></div>
+        <div class="carte"><div class="discret">Commission totale</div>
+          <b>${sou(t.commission_fcfa)} F</b></div>
+        <div class="carte"><div class="discret">Reste à verser</div>
+          <b>${sou(t.a_verser_fcfa)} F</b></div>
+      </div>
+      ${(d.detail || []).map((a, rang) => `
+        <div style="border:1px solid var(--trait);border-radius:9px;
+                    padding:12px;margin-top:12px">
+          <div class="ligne" style="justify-content:space-between">
+            <div><b>${a.apporteur}</b>
+              <span class="discret">— ${a.clients.length} client(s),
+                ${sou(a.encaisse_fcfa)} F encaissés</span></div>
+            <div>${a.versee
+              ? `<span class="puce ok">versée le
+                   ${quand(a.verse_le, false)}</span>
+                 <button onclick="annulerVersement(${rang})">Annuler</button>`
+              : `<b>${sou(a.commission_fcfa)} F à verser</b>
+                 <button class="principal"
+                         onclick="marquerVersee(${rang})">Marquer versée
+                 </button>`}</div>
+          </div>
+          <div style="overflow-x:auto"><table>
+            <thead><tr><th>Client</th><th class="nombre">Encaissé</th>
+              <th class="nombre">Coût</th><th class="nombre">Marge</th>
+              <th class="nombre">Commission</th></tr></thead>
+            <tbody>${a.clients.map(c => `<tr><td>${c.client}</td>
+              <td class="nombre">${sou(c.encaisse_fcfa)}</td>
+              <td class="nombre">${sou(c.cout_lecture_fcfa)}</td>
+              <td class="nombre">${sou(c.marge_fcfa)}</td>
+              <td class="nombre"><b>${sou(c.commission_fcfa)}</b></td>
+              </tr>`).join("")}</tbody>
+          </table></div>
+        </div>`).join("")
+        || '<p class="discret">Aucun encaissement ce mois-ci.</p>'}`;
+  } catch (e) { dire(e.message, false); }
+}
+
+async function marquerVersee(rang) {
+  const a = (COMMISSIONS?.detail || [])[rang];
+  if (!a) return;
+  const montant = prompt(
+    `Montant versé à ${a.apporteur} pour ${COMMISSIONS.mois} :`,
+    String(a.commission_fcfa));
+  if (montant === null) return;
+  try {
+    await appeler({
+      action: "verser", apporteur: a.apporteur, mois: COMMISSIONS.mois,
+      montant_fcfa: Number(montant) || 0,
+    });
+    dire("Commission marquée versée.");
+    await commissions();
+  } catch (e) { dire(e.message, false); }
+}
+
+//  ANNULER UN VERSEMENT SE CONFIRME : c'est un fait qu'on efface.
+async function annulerVersement(rang) {
+  const a = (COMMISSIONS?.detail || [])[rang];
+  if (!a) return;
+  const tape = prompt(
+    "ANNULER le versement de " + a.apporteur + " pour "
+    + COMMISSIONS.mois + " ?\n\nRecopiez le nom de l'apporteur :\n\n"
+    + a.apporteur, "");
+  if (tape === null) return;
+  if (tape.trim() !== a.apporteur) {
+    return dire("Le nom ne correspond pas. Rien n'a été annulé.", false);
+  }
+  try {
+    await appeler({
+      action: "verser", apporteur: a.apporteur, mois: COMMISSIONS.mois,
+      annuler: true, confirmation: a.apporteur,
+    });
+    dire("Versement annulé.");
+    await commissions();
+  } catch (e) { dire(e.message, false); }
 }
 
 document.getElementById("motdepasse")
