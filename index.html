@@ -198,7 +198,6 @@
       <thead><tr>
         <th>Mois</th><th>Client</th><th class="nombre">Appels</th>
         <th class="nombre">Francs</th>
-        <th class="nombre">Moyenne / lecture</th>
         <th class="nombre">Plafond</th>
         <th>Dernière lecture</th>
       </tr></thead>
@@ -222,7 +221,7 @@
        néanmoins un signal — changez votre mot de passe.</p>
   </section>
   <p class="discret" style="text-align:center;margin-top:26px">
-     Page fabriquée le <b>26/08/2026 à 17h23</b>.<br>
+     Page fabriquée le <b>26/08/2026 à 17h42</b>.<br>
      Si cette date n'est pas la dernière, faites
      <b>Ctrl + Maj + R</b> : votre navigateur garde l'ancienne en
      mémoire.</p>
@@ -444,31 +443,33 @@ function dessinerForfaits(lignes) {
   }).join("");
 }
 
-//  LA MOYENNE, PAR UTILISATEUR — demandée le 26/08/2026.
+//  CE QUE COUTE UN DOSSIER, POUR CE CLIENT-LA — 26/08/2026.
 //
-//      « Non non je la veux par utilisateur. »
-//                              — Monsieur le PDG.
+//      « Actuellement l'utilisateur Aladji a traité 3 dossiers qui ont
+//        coûté 353f, c'est bien ça ? Donc la moyenne de coût fera
+//        353 / 3 = 117,66f. C'est ce que je veux pour chaque
+//        utilisateur. »              — Monsieur le PDG.
 //
-//  MA PREMIERE VERSION ETAIT UNE MOYENNE D'ENSEMBLE, posée en carte
-//  dans la Vue d'ensemble : le coût total du mois divisé par le nombre
-//  de clients ayant lu. Un seul chiffre pour tout le monde — donc
-//  aucun moyen de voir quel client coûte cher.
+//  DEUX FOIS JE SUIS PASSE A COTE, ET DEUX FOIS FAUTE D'AVOIR DEMANDE :
+//    1. une moyenne d'ensemble, en carte — un seul chiffre pour tous ;
+//    2. une moyenne PAR APPEL — le bon endroit, le mauvais diviseur.
 //
-//  ELLE VIT DESORMAIS OU VIT LE TOTAL : dans le tableau de la dépense,
-//  ligne par ligne, à côté des francs de ce client-là. C'est ce qu'il
-//  demandait — « on a déjà un champ qui affiche le total coût par
-//  utilisateur, je veux un champ pour la moyenne ».
+//  LE DIVISEUR EST LE NOMBRE DE DOSSIERS. Un dossier demande plusieurs
+//  appels : c'est le dossier qui compte, pas l'appel.
 //
-//  MOYENNE DE QUOI : des francs par appel. Le tableau compte déjà les
-//  appels de chaque client ; c'est le seul dénominateur qu'il porte, et
-//  celui qui dit ce que coûte une lecture pour ce client.
-function moyenneParAppel(francs, appels) {
-  const f = Number(francs || 0);
-  const a = Number(appels || 0);
-  //  ZERO APPEL N'EST PAS UNE MOYENNE DE ZERO : c'est une moyenne qui
-  //  n'existe pas. Ecrire « 0 » laisserait croire à une lecture gratuite.
-  if (!a) { return "—"; }
-  return Math.round(f / a).toLocaleString("fr-FR");
+//  ELLE NE S'AFFICHE QUE LA OU LES DEUX CHIFFRES SONT DU MEME MOIS.
+//  Le tableau de la dépense ne compte pas les dossiers ; y croiser un
+//  cumul donnerait un chiffre faux dès le deuxième mois.
+function moyenneParDossier(cout, dossiers) {
+  const c = Number(cout || 0);
+  const n = Number(dossiers || 0);
+  //  ZERO DOSSIER N'EST PAS UNE MOYENNE DE ZERO : c'est une moyenne
+  //  qui n'existe pas. Ecrire « 0 » laisserait croire à la gratuité.
+  if (!n) { return "—"; }
+  //  DEUX DECIMALES : 353 / 3 fait 117,66 — arrondir au franc ferait
+  //  perdre ce que la moyenne a de parlant sur de petits nombres.
+  return (c / n).toLocaleString("fr-FR",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function dessinerDepense(lignes) {
@@ -477,10 +478,9 @@ function dessinerDepense(lignes) {
     <td>${echapper(x.client || x.cle)}</td>
     <td class="nombre">${x.appels ?? 0}</td>
     <td class="nombre">${Number(x.francs || 0).toLocaleString("fr-FR")}</td>
-    <td class="nombre"><b>${moyenneParAppel(x.francs, x.appels)}</b></td>
     <td class="nombre">${Number(x.plafond || 0).toLocaleString("fr-FR")}</td>
     <td class="discret">${quand(x.derniere_lecture)}</td></tr>`)
-    .join("") || '<tr><td colspan="7" class="discret">aucune lecture</td></tr>';
+    .join("") || '<tr><td colspan="6" class="discret">aucune lecture</td></tr>';
 }
 
 //  UNE CASE VIDE VAUT « LA VALEUR PAR DEFAUT », JAMAIS ZERO.
@@ -742,7 +742,8 @@ async function fiche(rang) {
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Mois</th><th class="nombre">Dossiers</th>
           <th class="nombre">Appels de lecture</th>
-          <th class="nombre">Coût FCFA</th></tr></thead>
+          <th class="nombre">Coût FCFA</th>
+          <th class="nombre">Coût / dossier</th></tr></thead>
         <tbody>${moisDeLaFiche(d)}</tbody>
       </table></div>`;
     document.getElementById("fiche").hidden = false;
@@ -766,12 +767,14 @@ function moisDeLaFiche(d) {
   }
   const lignes = Object.values(par).sort((a, b) => (a.mois < b.mois ? 1 : -1));
   if (!lignes.length) {
-    return '<tr><td colspan="4" class="discret">aucun dossier</td></tr>';
+    return '<tr><td colspan="5" class="discret">aucun dossier</td></tr>';
   }
   return lignes.map(m => `<tr><td>${echapper(m.mois)}</td>
     <td class="nombre">${m.dossiers}</td>
     <td class="nombre">${m.appels}</td>
-    <td class="nombre">${sou(Math.round(m.francs))}</td></tr>`).join("");
+    <td class="nombre">${sou(Math.round(m.francs))}</td>
+    <td class="nombre"><b>${moyenneParDossier(m.francs, m.dossiers)}</b></td></tr>`)
+    .join("");
 }
 
 
@@ -813,7 +816,9 @@ async function rapport() {
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Client</th><th>Apporteur</th>
           <th class="nombre">Dossiers</th><th class="nombre">Recette</th>
-          <th class="nombre">Coût</th><th class="nombre">Marge</th>
+          <th class="nombre">Coût</th>
+          <th class="nombre">Coût / dossier</th>
+          <th class="nombre">Marge</th>
           <th class="nombre">Commission</th></tr></thead>
         <tbody>${(d.detail || []).map(l => `<tr>
           <td>${echapper(l.client || "")}</td>
@@ -821,9 +826,10 @@ async function rapport() {
           <td class="nombre">${l.dossiers}</td>
           <td class="nombre">${sou(l.recette_fcfa)}</td>
           <td class="nombre">${sou(l.cout_lecture_fcfa)}</td>
+          <td class="nombre"><b>${moyenneParDossier(l.cout_lecture_fcfa, l.dossiers)}</b></td>
           <td class="nombre">${sou(l.marge_fcfa)}</td>
           <td class="nombre"><b>${sou(l.commission_fcfa)}</b></td></tr>`)
-          .join("") || '<tr><td colspan="7" class="discret">aucun dossier ce mois-ci</td></tr>'}
+          .join("") || '<tr><td colspan="8" class="discret">aucun dossier ce mois-ci</td></tr>'}
         </tbody>
       </table></div>`;
   } catch (e) { dire(e.message, false); }
