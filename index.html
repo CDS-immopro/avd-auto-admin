@@ -197,7 +197,9 @@
     <div style="overflow-x:auto"><table id="table-depense">
       <thead><tr>
         <th>Mois</th><th>Client</th><th class="nombre">Appels</th>
-        <th class="nombre">Francs</th><th class="nombre">Plafond</th>
+        <th class="nombre">Francs</th>
+        <th class="nombre">Moyenne / lecture</th>
+        <th class="nombre">Plafond</th>
         <th>Dernière lecture</th>
       </tr></thead>
       <tbody></tbody>
@@ -220,7 +222,7 @@
        néanmoins un signal — changez votre mot de passe.</p>
   </section>
   <p class="discret" style="text-align:center;margin-top:26px">
-     Page fabriquée le <b>26/08/2026 à 17h01</b>.<br>
+     Page fabriquée le <b>26/08/2026 à 17h23</b>.<br>
      Si cette date n'est pas la dernière, faites
      <b>Ctrl + Maj + R</b> : votre navigateur garde l'ancienne en
      mémoire.</p>
@@ -360,36 +362,10 @@ function dessinerResume(forfaits, depense) {
   const urgents = forfaits.filter(f =>
     f.actif && (Number(f.restants) <= 5 || (jours(f.expire_le) ?? 99) <= 7)).length;
 
-  //  LA MOYENNE PAR UTILISATEUR — demandée le 25/08/2026.
-  //
-  //  SUR COMBIEN DE CLIENTS ? Pas sur les abonnés inscrits : un
-  //  abonné qui n'a rien lu ce mois-ci tirerait la moyenne vers le
-  //  bas et ferait croire que la lecture coûte moins qu'elle ne
-  //  coûte. On divise donc par les clients QUI ONT REELLEMENT LU ce
-  //  mois-ci — ceux-là mêmes qui composent le total juste au-dessus.
-  //  Les deux chiffres parlent ainsi du même ensemble.
-  const lecteurs = new Set(depense
-    .filter(x => String(x.mois).slice(0, 7) === mois
-                 && Number(x.francs || 0) > 0)
-    .map(x => x.client)).size;
-  //  ZERO LECTEUR N'EST PAS UNE MOYENNE DE ZERO : c'est une moyenne
-  //  qui n'existe pas. Ecrire « 0 F » laisserait croire que la
-  //  lecture n'a rien coûté, alors que personne n'a lu.
-  const moyenne = lecteurs
-    ? Math.round(francs / lecteurs).toLocaleString("fr-FR") + " F"
-    : "—";
-
   document.getElementById("resume").innerHTML = [
     ["Abonnés actifs", actifs, ""],
     ["Recette du cycle", recette.toLocaleString("fr-FR") + " F", ""],
     ["Lecture ce mois", Math.round(francs).toLocaleString("fr-FR") + " F", ""],
-    //  LE DENOMINATEUR EST ECRIT SOUS LE CHIFFRE. Une moyenne dont on
-    //  ignore sur quoi elle porte ne se lit pas : « 4 200 F » ne veut
-    //  rien dire, « 4 200 F sur 3 clients » se comprend d'un coup.
-    ["Moyenne par client",
-     moyenne + (lecteurs ? ` <span class="discret">sur ${lecteurs} `
-       + (lecteurs > 1 ? "clients" : "client") + "</span>"
-       : ' <span class="discret">aucune lecture</span>'), ""],
     ["À relancer", urgents, urgents ? "color:#b3261e" : ""],
   ].map(([titre, valeur, style]) =>
     `<div class="carte"><div class="discret">${titre}</div>
@@ -468,15 +444,43 @@ function dessinerForfaits(lignes) {
   }).join("");
 }
 
+//  LA MOYENNE, PAR UTILISATEUR — demandée le 26/08/2026.
+//
+//      « Non non je la veux par utilisateur. »
+//                              — Monsieur le PDG.
+//
+//  MA PREMIERE VERSION ETAIT UNE MOYENNE D'ENSEMBLE, posée en carte
+//  dans la Vue d'ensemble : le coût total du mois divisé par le nombre
+//  de clients ayant lu. Un seul chiffre pour tout le monde — donc
+//  aucun moyen de voir quel client coûte cher.
+//
+//  ELLE VIT DESORMAIS OU VIT LE TOTAL : dans le tableau de la dépense,
+//  ligne par ligne, à côté des francs de ce client-là. C'est ce qu'il
+//  demandait — « on a déjà un champ qui affiche le total coût par
+//  utilisateur, je veux un champ pour la moyenne ».
+//
+//  MOYENNE DE QUOI : des francs par appel. Le tableau compte déjà les
+//  appels de chaque client ; c'est le seul dénominateur qu'il porte, et
+//  celui qui dit ce que coûte une lecture pour ce client.
+function moyenneParAppel(francs, appels) {
+  const f = Number(francs || 0);
+  const a = Number(appels || 0);
+  //  ZERO APPEL N'EST PAS UNE MOYENNE DE ZERO : c'est une moyenne qui
+  //  n'existe pas. Ecrire « 0 » laisserait croire à une lecture gratuite.
+  if (!a) { return "—"; }
+  return Math.round(f / a).toLocaleString("fr-FR");
+}
+
 function dessinerDepense(lignes) {
   document.querySelector("#table-depense tbody").innerHTML = lignes.map(x => `
     <tr><td>${echapper(String(x.mois).slice(0, 7))}</td>
     <td>${echapper(x.client || x.cle)}</td>
     <td class="nombre">${x.appels ?? 0}</td>
     <td class="nombre">${Number(x.francs || 0).toLocaleString("fr-FR")}</td>
+    <td class="nombre"><b>${moyenneParAppel(x.francs, x.appels)}</b></td>
     <td class="nombre">${Number(x.plafond || 0).toLocaleString("fr-FR")}</td>
     <td class="discret">${quand(x.derniere_lecture)}</td></tr>`)
-    .join("") || '<tr><td colspan="6" class="discret">aucune lecture</td></tr>';
+    .join("") || '<tr><td colspan="7" class="discret">aucune lecture</td></tr>';
 }
 
 //  UNE CASE VIDE VAUT « LA VALEUR PAR DEFAUT », JAMAIS ZERO.
