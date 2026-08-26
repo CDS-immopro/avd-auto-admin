@@ -199,7 +199,7 @@
        néanmoins un signal — changez votre mot de passe.</p>
   </section>
   <p class="discret" style="text-align:center;margin-top:26px">
-     Page fabriquée le <b>19/08/2026 à 17h32</b>.<br>
+     Page fabriquée le <b>26/08/2026 à 16h27</b>.<br>
      Si cette date n'est pas la dernière, faites
      <b>Ctrl + Maj + R</b> : votre navigateur garde l'ancienne en
      mémoire.</p>
@@ -339,10 +339,36 @@ function dessinerResume(forfaits, depense) {
   const urgents = forfaits.filter(f =>
     f.actif && (Number(f.restants) <= 5 || (jours(f.expire_le) ?? 99) <= 7)).length;
 
+  //  LA MOYENNE PAR UTILISATEUR — demandée le 25/08/2026.
+  //
+  //  SUR COMBIEN DE CLIENTS ? Pas sur les abonnés inscrits : un
+  //  abonné qui n'a rien lu ce mois-ci tirerait la moyenne vers le
+  //  bas et ferait croire que la lecture coûte moins qu'elle ne
+  //  coûte. On divise donc par les clients QUI ONT REELLEMENT LU ce
+  //  mois-ci — ceux-là mêmes qui composent le total juste au-dessus.
+  //  Les deux chiffres parlent ainsi du même ensemble.
+  const lecteurs = new Set(depense
+    .filter(x => String(x.mois).slice(0, 7) === mois
+                 && Number(x.francs || 0) > 0)
+    .map(x => x.client)).size;
+  //  ZERO LECTEUR N'EST PAS UNE MOYENNE DE ZERO : c'est une moyenne
+  //  qui n'existe pas. Ecrire « 0 F » laisserait croire que la
+  //  lecture n'a rien coûté, alors que personne n'a lu.
+  const moyenne = lecteurs
+    ? Math.round(francs / lecteurs).toLocaleString("fr-FR") + " F"
+    : "—";
+
   document.getElementById("resume").innerHTML = [
     ["Abonnés actifs", actifs, ""],
     ["Recette du cycle", recette.toLocaleString("fr-FR") + " F", ""],
     ["Lecture ce mois", Math.round(francs).toLocaleString("fr-FR") + " F", ""],
+    //  LE DENOMINATEUR EST ECRIT SOUS LE CHIFFRE. Une moyenne dont on
+    //  ignore sur quoi elle porte ne se lit pas : « 4 200 F » ne veut
+    //  rien dire, « 4 200 F sur 3 clients » se comprend d'un coup.
+    ["Moyenne par client",
+     moyenne + (lecteurs ? ` <span class="discret">sur ${lecteurs} `
+       + (lecteurs > 1 ? "clients" : "client") + "</span>"
+       : ' <span class="discret">aucune lecture</span>'), ""],
     ["À relancer", urgents, urgents ? "color:#b3261e" : ""],
   ].map(([titre, valeur, style]) =>
     `<div class="carte"><div class="discret">${titre}</div>
