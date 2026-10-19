@@ -76,7 +76,27 @@
   .cle{font-family:Consolas,monospace;font-size:13px;letter-spacing:.4px}
   .discret{color:var(--doux);font-size:13px}
   #porte{max-width:420px;margin:60px auto;text-align:center}
-  #message{padding:11px 14px;border-radius:8px;margin-bottom:14px;display:none}
+  /* LE MESSAGE SE VOIT OU QUE L'ON SOIT DANS LA PAGE -- 19/10/2026.
+     Il s'affichait en haut, six secondes, pendant qu'on regardait la
+     ligne du client, plus bas, sur le telephone : on ne le voyait pas.
+     Il se pose desormais en bas de l'ecran, devant tout. */
+  #message{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+           width:max-content;max-width:min(92vw,560px);z-index:20;
+           padding:11px 14px;border-radius:8px;display:none;cursor:pointer;
+           box-shadow:0 6px 24px rgba(0,0,0,.18)}
+  /* LA QUESTION GRAVE SE POSE DANS LA PAGE -- voir confirmerDansLaPage. */
+  #voile{position:fixed;inset:0;z-index:30;background:rgba(15,23,34,.45);
+         display:flex;align-items:center;justify-content:center;padding:16px}
+  #voile[hidden]{display:none}
+  #voile .boite{background:var(--blanc);border-radius:12px;width:100%;
+                max-width:460px;padding:20px;
+                box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  #voile h3{margin:0 0 10px;font-size:17px;color:var(--rouge)}
+  #voile p{margin:0 0 12px}
+  #voile .boutons{display:flex;gap:10px;justify-content:flex-end;
+                  flex-wrap:wrap;margin-top:16px}
+  button.rouge{background:var(--rouge);color:#fff;border-color:var(--rouge)}
+  button.rouge:hover{color:#fff;opacity:.9}
   .chiffre{font-size:26px;font-weight:600}
   .cartes{display:flex;gap:14px;flex-wrap:wrap}
   .carte{flex:1;min-width:170px;border:1px solid var(--trait);
@@ -221,7 +241,7 @@
        néanmoins un signal — changez votre mot de passe.</p>
   </section>
   <p class="discret" style="text-align:center;margin-top:26px">
-     Page fabriquée le <b>26/08/2026 à 17h42</b>.<br>
+     Page fabriquée le <b>19/10/2026 à 10h22</b>.<br>
      Si cette date n'est pas la dernière, faites
      <b>Ctrl + Maj + R</b> : votre navigateur garde l'ancienne en
      mémoire.</p>
@@ -279,13 +299,65 @@ function echapper(valeur) {
     .split("'").join("&#39;");
 }
 
+//  UN MESSAGE ROUGE SE LIT -- 19/10/2026. Il reste vingt secondes, le
+//  vert six, et l'un comme l'autre se ferme d'un geste. Un seul
+//  minuteur a la fois : l'ancien effacait le message suivant avant
+//  l'heure.
 function dire(texte, bon = true) {
   const m = document.getElementById("message");
   m.textContent = texte;
   m.style.display = "block";
   m.style.background = bon ? "#e6f4ec" : "#fdeceb";
   m.style.color = bon ? "#0d7a4a" : "#b3261e";
-  setTimeout(() => { m.style.display = "none"; }, 6000);
+  m.onclick = () => { m.style.display = "none"; };
+  clearTimeout(dire.minuteur);
+  dire.minuteur = setTimeout(() => { m.style.display = "none"; },
+                             bon ? 6000 : 20000);
+}
+
+//  UNE QUESTION GRAVE SE POSE DANS LA PAGE -- 19/10/2026.
+//
+//      « La page où je gère les licences de AVD auto, quand je clique
+//        sur supprimer, ça ne supprime pas l'utilisateur. »
+//                                 -- Monsieur le PDG, 19/10/2026.
+//
+//  La suppression demandait de RECOPIER LA CLE -- trente et un
+//  caracteres -- dans une petite fenetre du navigateur. Une faute de
+//  frappe, et rien n'etait supprime : la page le disait, en haut,
+//  six secondes, loin de la ligne qu'on regardait. Et Chrome laisse
+//  bloquer ces petites fenetres (« empecher cette page de creer
+//  d'autres boites de dialogue ») : le bouton ne faisait plus rien.
+//
+//  La question se pose donc ICI, devant tout : le nom du client, ce
+//  qui part avec lui, sa cle, et deux boutons. Rien a recopier. C'est
+//  la regle de la maison pour un cas grave : un accord explicite,
+//  OK ou Annuler. Annuler a le regard par defaut.
+//
+//  LE TEXTE Y ENTRE PAR textContent : un nom de client n'y devient
+//  jamais du HTML.
+function confirmerDansLaPage(titre, texte, cle, libelle) {
+  const voile = document.getElementById("voile");
+  const oui = document.getElementById("voile-oui");
+  const non = document.getElementById("voile-non");
+  document.getElementById("voile-titre").textContent = titre;
+  document.getElementById("voile-texte").textContent = texte;
+  document.getElementById("voile-cle").textContent = cle || "";
+  oui.textContent = libelle;
+  voile.hidden = false;
+  non.focus();
+  return new Promise(rendre => {
+    const touche = e => { if (e.key === "Escape") fin(false); };
+    function fin(reponse) {
+      voile.hidden = true;
+      oui.onclick = non.onclick = voile.onclick = null;
+      document.removeEventListener("keydown", touche);
+      rendre(reponse);
+    }
+    oui.onclick = () => fin(true);
+    non.onclick = () => fin(false);
+    voile.onclick = e => { if (e.target === voile) fin(false); };
+    document.addEventListener("keydown", touche);
+  });
 }
 
 async function entrer() {
@@ -608,28 +680,33 @@ async function modifier(rang) {
   } catch (e) { dire(e.message, false); }
 }
 
-//  SUPPRIMER NE SE RATTRAPE PAS. On fait retaper la clé, et le
-//  serveur exige la même confirmation : une page n'est qu'une page,
-//  et l'on peut appeler le serveur sans elle.
+//  SUPPRIMER NE SE RATTRAPE PAS. La question se pose dans la page
+//  (voir confirmerDansLaPage), et le serveur exige toujours la cle en
+//  confirmation : une page n'est qu'une page, et l'on peut appeler le
+//  serveur sans elle.
+//
+//  LA PREUVE, PAS L'ANNONCE -- 19/10/2026. La liste est relue APRES
+//  la reponse du serveur : si la licence y est encore, c'est dit en
+//  rouge, au lieu d'un « supprimee » demain dementi par la liste.
 async function supprimer(rang) {
   const f = LIGNES[rang];
   if (!f) return;
   const cle = f.cle;
   const client = f.client || "ce client";
-  const tape = prompt(
-    "SUPPRIMER définitivement la licence de " + client + " ?\n\n" +
-    "Sont effacés avec elle, sans retour : ses dossiers comptés,\n" +
-    "SES PAIEMENTS, et son historique de lecture.\n" +
-    "Recopiez la clé pour confirmer :\n\n" + cle, "");
-  if (tape === null) return;
-  if (tape.trim().toUpperCase() !== cle) {
-    return dire("La clé recopiée ne correspond pas. Rien n'a été supprimé.",
-                false);
-  }
+  const oui = await confirmerDansLaPage(
+    "Supprimer définitivement la licence de " + client + " ?",
+    "Sont effacés avec elle, sans retour : ses dossiers comptés, " +
+    "SES PAIEMENTS, et son historique de lecture.",
+    cle, "Supprimer définitivement");
+  if (!oui) return dire("Rien n'a été supprimé.");
   try {
     const r = await appeler({ action: "supprimer", cle, confirmation: cle });
-    dire("Licence de " + (r.client || client) + " supprimée.");
     await charger();
+    if (LIGNES.some(l => l.cle === cle)) {
+      return dire("La licence de " + client + " est TOUJOURS dans la " +
+                  "liste : le serveur ne l'a pas effacée.", false);
+    }
+    dire("Licence de " + (r.client || client) + " supprimée.");
   } catch (e) { dire(e.message, false); }
 }
 
@@ -1029,5 +1106,20 @@ async function annulerVersement(rang) {
 document.getElementById("motdepasse")
   .addEventListener("keydown", e => { if (e.key === "Enter") entrer(); });
 </script>
+<!-- LA QUESTION GRAVE, POSEE DANS LA PAGE -- voir confirmerDansLaPage.
+     Hors du bureau : elle s'affiche devant tout, ou que l'on soit. -->
+<div id="voile" hidden>
+  <div class="boite" role="dialog" aria-modal="true"
+       aria-labelledby="voile-titre">
+    <h3 id="voile-titre"></h3>
+    <p id="voile-texte"></p>
+    <p class="cle" id="voile-cle"></p>
+    <div class="boutons">
+      <button id="voile-non">Annuler</button>
+      <button class="rouge" id="voile-oui">Confirmer</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
