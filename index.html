@@ -241,7 +241,7 @@
        néanmoins un signal — changez votre mot de passe.</p>
   </section>
   <p class="discret" style="text-align:center;margin-top:26px">
-     Page fabriquée le <b>19/10/2026 à 10h22</b>.<br>
+     Page fabriquée le <b>20/10/2026 à 10h10</b>.<br>
      Si cette date n'est pas la dernière, faites
      <b>Ctrl + Maj + R</b> : votre navigateur garde l'ancienne en
      mémoire.</p>
@@ -801,6 +801,13 @@ async function fiche(rang) {
           Générer un nouveau code</button>
       </div>
       ${l.note ? `<p class="discret">Note : ${echapper(l.note)}</p>` : ""}
+      <h3 style="font-size:14px;margin:18px 0 6px">Dossiers soumis, d'un
+        renouvellement à l'autre</h3>
+      <div style="overflow-x:auto"><table id="table-periodes">
+        <thead><tr><th>Période</th>
+          <th class="nombre">Dossiers</th></tr></thead>
+        <tbody>${periodesDeLaFiche(d)}</tbody>
+      </table></div>
       <h3 style="font-size:14px;margin:18px 0 6px">Paiements reçus</h3>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Date</th><th class="nombre">Montant</th>
@@ -815,7 +822,8 @@ async function fiche(rang) {
           || '<tr><td colspan="5" class="discret">aucun paiement enregistré</td></tr>'}
         </tbody>
       </table></div>
-      <h3 style="font-size:14px;margin:18px 0 6px">Dossiers et lecture</h3>
+      <h3 style="font-size:14px;margin:18px 0 6px">Mois par mois : dossiers
+        et lecture</h3>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Mois</th><th class="nombre">Dossiers</th>
           <th class="nombre">Appels de lecture</th>
@@ -826,6 +834,95 @@ async function fiche(rang) {
     document.getElementById("fiche").hidden = false;
     document.getElementById("fiche").scrollIntoView({ behavior: "smooth" });
   } catch (e) { dire(e.message, false); }
+}
+
+//  D'UN RENOUVELLEMENT A L'AUTRE -- 20/10/2026.
+//
+//      « Je veux avoir une hystorique de chaque mois. Par exemple avant
+//        de renouveler la licence, l'utilisateur avait soumis 11 avd sur
+//        30, quand je renouvelle on n'a plus une trace de combien de
+//        dossiers il a soumis tel mois depuis qu'il a commencé. »
+//                                         -- Monsieur le PDG.
+//
+//  LE COMPTEUR DU FORFAIT REPART A ZERO, LES DOSSIERS COMPTES RESTENT.
+//  Le tableau « mois par mois » les montrait deja, mais au calendrier :
+//  un forfait du 18/09 au 19/10 s'y coupe en deux, et le « 11 sur 30 »
+//  ne s'y relit nulle part. Les periodes se lisent ici sur ce qui est
+//  INSCRIT, sans rien supposer :
+//    - la creation de la licence ouvre la premiere ;
+//    - chaque paiement « renouvellement » en ouvre une. C'est le seul
+//      geste qui en inscrit : « Enregistrer un paiement » ne renouvelle
+//      rien, il n'ouvre donc rien ;
+//    - le debut du forfait en cours ouvre la derniere, meme quand ce
+//      forfait a commence seul, paye d'avance.
+//  Un renouvellement venu PENDANT le forfait en cours n'ouvre rien : il
+//  ajoute des forfaits sans remettre le compteur a zero.
+//  La derniere ligne dit le compteur du serveur -- « 0 sur 30 » : c'est
+//  lui qui fait foi pour le forfait en cours.
+function jourFr(iso) {
+  const [a, m, j] = String(iso).split("-");
+  return `${j}/${m}/${a}`;
+}
+
+//  LA VEILLE SE COMPTE EN JOURS, PAS EN HEURES : une date de jour lue
+//  dans l'heure du telephone peut reculer d'un jour.
+function veille(iso) {
+  const [a, m, j] = String(iso).split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, j - 1)).toISOString().slice(0, 10);
+}
+
+function periodesDeLaFiche(d) {
+  const l = d.licence || {};
+  //  UN SERVEUR D'AVANT NE DONNE PAS LES JOURS : on le dit, sans rien
+  //  inventer, et le reste de la fiche s'affiche.
+  if (!Array.isArray(d.dossiers_par_jour)) {
+    return '<tr><td colspan="2" class="discret">le serveur ne donne pas ' +
+           'encore les dossiers jour par jour</td></tr>';
+  }
+  const jour = x => (/^\d{4}-\d{2}-\d{2}/.test(String(x ?? ""))
+    ? String(x).slice(0, 10) : "");
+  const depuis = jour(l.forfait_depuis);
+  const bornes = new Set();
+  if (jour(l.cree_le)) bornes.add(jour(l.cree_le));
+  for (const p of d.paiements || []) {
+    if (String(p.note || "").trim().toLowerCase()
+          .startsWith("renouvellement") && jour(p.paye_le)) {
+      bornes.add(jour(p.paye_le));
+    }
+  }
+  if (depuis) bornes.add(depuis);
+  const debuts = [...bornes].filter(b => !depuis || b <= depuis).sort();
+  if (!debuts.length) {
+    return '<tr><td colspan="2" class="discret">aucune période connue' +
+           '</td></tr>';
+  }
+  const compte = (du, au) => d.dossiers_par_jour
+    .filter(x => jour(x.jour) && jour(x.jour) >= du
+                 && (!au || jour(x.jour) < au))
+    .reduce((t, x) => t + Number(x.dossiers || 0), 0);
+  const lignes = [];
+  //  RIEN NE DISPARAIT SANS QUE PERSONNE LE SACHE : des dossiers comptes
+  //  avant la premiere date connue forment une ligne a eux.
+  const avant = compte("0000-00-00", debuts[0]);
+  if (avant) {
+    lignes.push(`<tr><td>jusqu'au ${jourFr(veille(debuts[0]))}</td>
+      <td class="nombre">${avant}</td></tr>`);
+  }
+  for (let i = 0; i < debuts.length; i++) {
+    const du = debuts[i];
+    const suivant = debuts[i + 1];
+    if (suivant) {
+      lignes.push(`<tr><td>du ${jourFr(du)} au ${jourFr(veille(suivant))}</td>
+        <td class="nombre">${compte(du, suivant)}</td></tr>`);
+    } else {
+      const utilises = l.dossiers_utilises ?? compte(du);
+      lignes.push(`<tr><td><b>depuis le ${jourFr(du)}</b>
+        <span class="discret">— forfait en cours</span></td>
+        <td class="nombre"><b>${echapper(utilises)} sur
+          ${echapper(l.dossiers_inclus ?? "—")}</b></td></tr>`);
+    }
+  }
+  return lignes.reverse().join("");
 }
 
 //  LES DEUX HISTORIQUES N'ONT PAS LES MEMES MOIS : un mois sans
